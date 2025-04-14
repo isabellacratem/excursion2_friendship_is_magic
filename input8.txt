@@ -1,0 +1,17 @@
+a INPUT
+b INPUT
+c INPUT
+d INPUT
+e INPUT
+T OUTPUT
+t1 = AND b c
+t2 = NOT t1
+t3 = NOT a
+t4 = AND t3 t2
+G = NOT t4
+t5 = AND d e
+t6 = NOT t5
+t7 = AND c a
+t8 = AND t7 t6
+M = NOT t8
+T = AND G M

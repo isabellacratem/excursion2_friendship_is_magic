@@ -1,0 +1,13 @@
+a INPUT
+b INPUT
+c INPUT
+d INPUT
+e INPUT
+F OUTPUT
+t1 = OR a d
+t2 = AND c b
+t3 = OR t1 t2
+t5 = AND t3 b
+t6 = OR c t5
+t4 = NOT t6
+F = t4
