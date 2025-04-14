@@ -13,7 +13,11 @@ enum class NodeType {
     OR,
     NOT,
     INPUT,
-    UNKNOWN
+    OUTPUT,
+    NAND2,
+    NOR2,
+    AOI21,
+    AOI22
 };
 
 // Structure to represent a node in the circuit
@@ -24,7 +28,7 @@ struct Node {
     int cost;
     bool visited;
     
-    Node() : type(NodeType::UNKNOWN), cost(-1), visited(false) {}
+    Node() : type(NodeType::INPUT), cost(-1), visited(false) {}
 };
 
 // Cost of each component in the technology library
@@ -36,7 +40,14 @@ const int OR2_COST = 4;
 const int AOI21_COST = 7;
 const int AOI22_COST = 7;
 
-// Technology mapping class
+// Function to trim whitespace from a string
+std::string trim(const std::string& str) {
+    size_t first = str.find_first_not_of(" \t\r\n");
+    if (first == std::string::npos) return "";
+    size_t last = str.find_last_not_of(" \t\r\n");
+    return str.substr(first, last - first + 1);
+}
+
 class TechnologyMapper {
 private:
     std::unordered_map<std::string, Node> nodes;
@@ -53,83 +64,131 @@ public:
 
         std::string line;
         while (std::getline(file, line)) {
-            // Skip empty lines
-            if (line.empty() || line.find_first_not_of(" \t\r\n") == std::string::npos) {
-                continue;
-            }
+            line = trim(line);
+            if (line.empty() || line.find("Test") == 0 || line.find("Script") == 0) continue;
 
             std::istringstream iss(line);
-            std::string token;
-            iss >> token;
-
-            if (token == "INPUT") {
-                std::string inputName;
-                iss >> inputName;
-                
+            std::string nodeName;
+            iss >> nodeName;
+            
+            std::string operation;
+            iss >> operation;
+            
+            if (operation == "INPUT") {
+                // This is an input node
                 Node inputNode;
-                inputNode.name = inputName;
+                inputNode.name = nodeName;
                 inputNode.type = NodeType::INPUT;
                 inputNode.cost = 0; // Input nodes have zero cost
-                nodes[inputName] = inputNode;
-            }
-            else if (token == "OUTPUT") {
-                iss >> outputNode;
-            }
-            else {
-                // Parse node definition
-                std::string nodeName = token;
-                std::string equals;
-                iss >> equals; // Skip "="
-                
-                if (equals != "=") {
-                    std::cerr << "Error: Invalid syntax in netlist" << std::endl;
-                    return false;
+                nodes[nodeName] = inputNode;
+            } else if (operation == "OUTPUT") {
+                // This is the output node
+                outputNode = nodeName;
+                // Make sure we have a node defined for the output
+                if (nodes.find(nodeName) == nodes.end()) {
+                    Node outNode;
+                    outNode.name = nodeName;
+                    outNode.type = NodeType::OUTPUT;
+                    nodes[nodeName] = outNode;
                 }
-                
-                std::string operation;
-                iss >> operation;
+            } else if (operation == "=") {
+                // This is a gate definition
+                std::string gateType;
+                iss >> gateType;
                 
                 Node node;
                 node.name = nodeName;
                 
-                if (operation == "NOT") {
+                if (gateType == "NOT") {
                     node.type = NodeType::NOT;
                     std::string input;
                     iss >> input;
                     node.inputs.push_back(input);
-                }
-                else if (operation == "AND") {
+                } else if (gateType == "AND") {
                     node.type = NodeType::AND;
                     std::string input1, input2;
                     iss >> input1 >> input2;
                     node.inputs.push_back(input1);
                     node.inputs.push_back(input2);
-                }
-                else if (operation == "OR") {
+                } else if (gateType == "OR") {
                     node.type = NodeType::OR;
                     std::string input1, input2;
                     iss >> input1 >> input2;
                     node.inputs.push_back(input1);
                     node.inputs.push_back(input2);
-                }
-                else {
-                    std::cerr << "Error: Unknown operation: " << operation << std::endl;
-                    return false;
+                } else if (gateType == "NAND2") {
+                    node.type = NodeType::NAND2;
+                    std::string input1, input2;
+                    iss >> input1 >> input2;
+                    node.inputs.push_back(input1);
+                    node.inputs.push_back(input2);
+                } else if (gateType == "NOR2") {
+                    node.type = NodeType::NOR2;
+                    std::string input1, input2;
+                    iss >> input1 >> input2;
+                    node.inputs.push_back(input1);
+                    node.inputs.push_back(input2);
+                } else if (gateType == "AOI21") {
+                    node.type = NodeType::AOI21;
+                    std::string input1, input2, input3;
+                    iss >> input1 >> input2 >> input3;
+                    node.inputs.push_back(input1);
+                    node.inputs.push_back(input2);
+                    node.inputs.push_back(input3);
+                } else if (gateType == "AOI22") {
+                    node.type = NodeType::AOI22;
+                    std::string input1, input2, input3, input4;
+                    iss >> input1 >> input2 >> input3 >> input4;
+                    node.inputs.push_back(input1);
+                    node.inputs.push_back(input2);
+                    node.inputs.push_back(input3);
+                    node.inputs.push_back(input4);
+                } else {
+                    // Important fix: Don't treat unknown gate types as errors since they could be node references
+                    if (iss.peek() == EOF) {
+                        // This is a simple assignment F = t5
+                        node.name = nodeName;
+                        // Use OUTPUT as a reference type
+                        node.type = NodeType::OUTPUT;
+                        node.inputs.push_back(gateType);
+                    } else {
+                        // This is an error case
+                        std::cerr << "Error: Invalid gate type in line: " << line << std::endl;
+                        file.close();
+                        return false;
+                    }
                 }
                 
                 nodes[nodeName] = node;
+            } else {
+                std::cerr << "Error: Invalid syntax in line: " << line << std::endl;
+                file.close();
+                return false;
             }
         }
         
         file.close();
+        
+        // Verify that we have an output node
+        if (outputNode.empty() || nodes.find(outputNode) == nodes.end()) {
+            std::cerr << "Error: Output node not properly defined" << std::endl;
+            return false;
+        }
+        
         return true;
     }
     
     // Calculate the minimal cost of the NAND-NOT transformed tree
     int calculateMinimalCost() {
         if (nodes.find(outputNode) == nodes.end()) {
-            std::cerr << "Error: Output node not found" << std::endl;
+            std::cerr << "Error: Output node not found: " << outputNode << std::endl;
             return -1;
+        }
+        
+        // Reset all nodes' visited status
+        for (auto& pair : nodes) {
+            pair.second.visited = false;
+            pair.second.cost = -1;  // Reset cost too
         }
         
         return calculateNodeCost(outputNode);
@@ -147,7 +206,7 @@ private:
         Node& node = nodes[nodeName];
         
         // If we've already computed the cost, return it
-        if (node.visited) {
+        if (node.visited && node.cost >= 0) {
             return node.cost;
         }
         
@@ -160,49 +219,116 @@ private:
             return 0;
         }
         
+        // For OUTPUT nodes, we need to find what they're connected to
+        if (node.type == NodeType::OUTPUT) {
+            if (!node.inputs.empty()) {
+                node.cost = calculateNodeCost(node.inputs[0]);
+            } else {
+                // This is an error, output should be connected to something
+                std::cerr << "Error: Output node " << nodeName << " has no inputs" << std::endl;
+                return -1;
+            }
+            return node.cost;
+        }
+        
         // Calculate costs for input nodes first
+        int inputCost = 0;
         for (const auto& input : node.inputs) {
-            calculateNodeCost(input);
+            int cost = calculateNodeCost(input);
+            if (cost < 0) return -1; // Error occurred
+            inputCost += cost;
         }
         
         // Calculate the cost based on the node type
         if (node.type == NodeType::NOT) {
-            // NOT gate can be implemented directly
-            node.cost = NOT_COST + nodes[node.inputs[0]].cost;
+            // NOT gate can be implemented directly or we can use a NAND with tied inputs
+            node.cost = std::min(NOT_COST, NAND2_COST) + inputCost;
         }
         else if (node.type == NodeType::AND) {
-            // AND gate can be implemented as NAND followed by NOT
-            int costWithNAND = NAND2_COST + NOT_COST + nodes[node.inputs[0]].cost + nodes[node.inputs[1]].cost;
+            // For AND:
+            // 1. Direct AND implementation
+            int costWithAND = AND2_COST + inputCost;
             
-            // Direct AND implementation
-            int costWithAND = AND2_COST + nodes[node.inputs[0]].cost + nodes[node.inputs[1]].cost;
+            // 2. Using NAND followed by NOT
+            int costWithNAND_NOT = NAND2_COST + NOT_COST + inputCost;
             
-            // Check if AOI21 can be used (needs specific structure)
-            int costWithAOI21 = std::numeric_limits<int>::max();
+            // 3. Using NAND with tied inputs (for single input) followed by NOT
+            int costWithNAND_TiedInputs = (node.inputs.size() == 1) ? 
+                NAND2_COST + NOT_COST + inputCost : std::numeric_limits<int>::max();
             
-            // Check if AOI22 can be used (needs specific structure)
-            int costWithAOI22 = std::numeric_limits<int>::max();
-            
-            // Choose the minimum cost
-            node.cost = std::min({costWithNAND, costWithAND, costWithAOI21, costWithAOI22});
+            node.cost = std::min({costWithAND, costWithNAND_NOT, costWithNAND_TiedInputs});
         }
         else if (node.type == NodeType::OR) {
-            // OR gate can be implemented as NOR followed by NOT
-            int costWithNOR = NOR2_COST + NOT_COST + nodes[node.inputs[0]].cost + nodes[node.inputs[1]].cost;
+            // For OR:
+            // 1. Direct OR implementation
+            int costWithOR = OR2_COST + inputCost;
             
-            // Direct OR implementation
-            int costWithOR = OR2_COST + nodes[node.inputs[0]].cost + nodes[node.inputs[1]].cost;
+            // 2. Using NOR followed by NOT
+            int costWithNOR_NOT = NOR2_COST + NOT_COST + inputCost;
             
-            // OR can also be implemented using NAND gates (De Morgan's laws)
-            // NOT(A) NAND NOT(B) = A OR B
-            int costWithNAND = NOT_COST + NOT_COST + NAND2_COST + 
-                             nodes[node.inputs[0]].cost + nodes[node.inputs[1]].cost;
+            // 3. Using De Morgan's laws: A OR B = NOT(NOT(A) AND NOT(B))
+            int costWithDeMorgan = 2 * NOT_COST + NAND2_COST + inputCost;
             
-            // Choose the minimum cost
-            node.cost = std::min({costWithNOR, costWithOR, costWithNAND});
+            node.cost = std::min({costWithOR, costWithNOR_NOT, costWithDeMorgan});
+        }
+        else if (node.type == NodeType::NAND2) {
+            // NAND2 gate directly
+            node.cost = NAND2_COST + inputCost;
+        }
+        else if (node.type == NodeType::NOR2) {
+            // For NOR2:
+            // 1. Direct NOR2 implementation
+            int costWithNOR = NOR2_COST + inputCost;
+            
+            // 2. Using De Morgan's laws and NAND: NOR(A,B) = NOT(A OR B) = NOT(NOT(NOT(A) AND NOT(B)))
+            int costWithDeMorgan = 3 * NOT_COST + NAND2_COST + inputCost;
+            
+            node.cost = std::min(costWithNOR, costWithDeMorgan);
+        }
+        else if (node.type == NodeType::AOI21) {
+            // For AOI21 (AND-OR-INVERT with 2 inputs AND, 1 input OR):
+            node.cost = AOI21_COST + inputCost;
+        }
+        else if (node.type == NodeType::AOI22) {
+            // For AOI22 (AND-OR-INVERT with 2x2 inputs):
+            node.cost = AOI22_COST + inputCost;
+        }
+        else {
+            std::cerr << "Error: Unknown node type for " << nodeName << std::endl;
+            return -1;
         }
         
         return node.cost;
+    }
+    
+public:
+    // Debug function to print all nodes and their costs
+    void printNodes() {
+        std::cout << "Nodes in the netlist:" << std::endl;
+        for (const auto& pair : nodes) {
+            std::cout << pair.first << " (";
+            switch (pair.second.type) {
+                case NodeType::INPUT: std::cout << "INPUT"; break;
+                case NodeType::AND: std::cout << "AND"; break;
+                case NodeType::OR: std::cout << "OR"; break;
+                case NodeType::NOT: std::cout << "NOT"; break;
+                case NodeType::OUTPUT: std::cout << "OUTPUT"; break;
+                case NodeType::NAND2: std::cout << "NAND2"; break;
+                case NodeType::NOR2: std::cout << "NOR2"; break;
+                case NodeType::AOI21: std::cout << "AOI21"; break;
+                case NodeType::AOI22: std::cout << "AOI22"; break;
+                default: std::cout << "UNKNOWN"; break;
+            }
+            std::cout << ") cost: " << pair.second.cost;
+            if (!pair.second.inputs.empty()) {
+                std::cout << " inputs: ";
+                for (const auto& input : pair.second.inputs) {
+                    std::cout << input << " ";
+                }
+            }
+            std::cout << std::endl;
+        }
+        std::cout << "Output node: " << outputNode << std::endl;
     }
 };
 
@@ -223,6 +349,9 @@ int main() {
         return 1;
     }
     
+    // Uncomment for debugging
+    // mapper.printNodes();
+    
     // Write the result to output file
     std::ofstream outFile("output.txt");
     if (!outFile.is_open()) {
@@ -232,6 +361,8 @@ int main() {
     
     outFile << minimalCost;
     outFile.close();
+    
+    std::cout << "Minimal cost: " << minimalCost << std::endl;
     
     return 0;
 }
