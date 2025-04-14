@@ -1,0 +1,20 @@
+a INPUT
+b INPUT
+c INPUT
+d INPUT
+e INPUT
+f INPUT
+g INPUT
+h INPUT
+F OUTPUT
+t1 = AND b c 
+t2 = OR a t1 
+t3 = OR d e 
+t4 = AND f g 
+t5 = AND t2 t3 
+t6 = OR t4 t5 
+t7 = AND a b 
+t8 = OR t7 d 
+t9 = AND t3 t8 
+t10 = AND t6 h 
+F = OR t9 t10
