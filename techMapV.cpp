@@ -96,6 +96,8 @@ TreeNode* buildNandNotTree(string name, unordered_map<string, Node>& circuit, un
 }
 
 int computeMinCost(TreeNode* node, unordered_map<TreeNode*, int>& dp) {
+    cout << "Evaluating node: " << node->name << " (" << node->gate << ")" << endl;
+    cout << "Evaluating node: " << node->name << " (" << node->gate << ")" << endl;
     if (dp.count(node)) return dp[node];
 
     int minCost = INT_MAX;
@@ -106,10 +108,83 @@ int computeMinCost(TreeNode* node, unordered_map<TreeNode*, int>& dp) {
         return 0;
     }
 
+    // Try matching AOI22 = NOT(NAND(NAND(x, y), NAND(z, w)))
+    if (node->gate == "NOT" && node->inputs.size() == 1) {
+        TreeNode* nandTop = node->inputs[0];
+        if (nandTop->gate == "NAND" && nandTop->inputs.size() == 2) {
+            TreeNode* n1 = nandTop->inputs[0];
+            TreeNode* n2 = nandTop->inputs[1];
+            if (n1->gate == "NAND" && n1->inputs.size() == 2 &&
+                n2->gate == "NAND" && n2->inputs.size() == 2) {
+                int a = computeMinCost(n1->inputs[0], dp);
+                int b = computeMinCost(n1->inputs[1], dp);
+                int c = computeMinCost(n2->inputs[0], dp);
+                int d = computeMinCost(n2->inputs[1], dp);
+                dp[node] = 7;
+                cout << "--> Matched AOI22 at " << node->name << " = 7" << endl;
+                return 7;
+            }
+        }
+    }
+
+    // Try matching AOI21 = NOT(NAND(NAND(x, y), z))
+    if (node->gate == "NOT" && node->inputs.size() == 1) {
+        TreeNode* nand1 = node->inputs[0];
+        if (nand1->gate == "NAND" && nand1->inputs.size() == 2) {
+            TreeNode* n1 = nand1->inputs[0];
+            TreeNode* n2 = nand1->inputs[1];
+            if (n1->gate == "NAND" && n1->inputs.size() == 2) {
+                int a = computeMinCost(n1->inputs[0], dp);
+                int b = computeMinCost(n1->inputs[1], dp);
+                int c = computeMinCost(n2, dp);
+                dp[node] = 7;
+                cout << "--> Matched AOI21 at " << node->name << " = 7" << endl;
+                return 7;
+            }
+        }
+    }
+
+    // Try matching AND = NOT(NAND(x,y))
+    if (node->gate == "NOT" && node->inputs.size() == 1) {
+        TreeNode* nandChild = node->inputs[0];
+        if (nandChild->gate == "NAND" && nandChild->inputs.size() == 2) {
+            int c1 = computeMinCost(nandChild->inputs[0], dp);
+            int c2 = computeMinCost(nandChild->inputs[1], dp);
+            dp[node] = 4;
+            cout << "--> Matched AND2 at " << node->name << " = 4" << endl;
+            return 4;
+        }
+    }
+
+    // Try matching OR = NAND(NOT(x), NOT(y))
+    if (node->gate == "NAND" && node->inputs.size() == 2) {
+        TreeNode* n1 = node->inputs[0];
+        TreeNode* n2 = node->inputs[1];
+        if (n1->gate == "NOT" && n2->gate == "NOT" &&
+            n1->inputs.size() == 1 && n2->inputs.size() == 1) {
+            int x = computeMinCost(n1->inputs[0], dp);
+            int y = computeMinCost(n2->inputs[0], dp);
+            dp[node] = x + y + 4;
+            cout << "--> Matched OR2 at " << node->name << " = " << dp[node] << endl;
+            return dp[node];
+        }
+    }
+
     // Try matching as NOT gate
     if (node->gate == "NOT" && node->inputs.size() == 1) {
         int childCost = computeMinCost(node->inputs[0], dp);
-        minCost = min(minCost, childCost + 2);
+        dp[node] = childCost + 2;
+        cout << "--> Matched NOT at " << node->name << " = " << dp[node] << endl;
+        return dp[node];
+    }
+
+    // Try matching as NAND gate
+    if (node->gate == "NAND" && node->inputs.size() == 2) {
+        int leftCost = computeMinCost(node->inputs[0], dp);
+        int rightCost = computeMinCost(node->inputs[1], dp);
+        dp[node] = leftCost + rightCost + 3;
+        cout << "--> Matched NAND2 at " << node->name << " = " << dp[node] << endl;
+        return dp[node];
     }
 
     // Try matching as NAND gate
@@ -174,6 +249,7 @@ int computeMinCost(TreeNode* node, unordered_map<TreeNode*, int>& dp) {
     if (minCost == INT_MAX) {
         minCost = 0;
     }
+    cout << "--> Selected min cost for node " << node->name << " = " << minCost << endl;
     dp[node] = minCost;
     return minCost;
 }
@@ -181,7 +257,7 @@ int computeMinCost(TreeNode* node, unordered_map<TreeNode*, int>& dp) {
 int main() {
     unordered_map<string, Node> circuit;
     string outputNode;
-    readNetlist("input.txt", circuit, outputNode);
+    readNetlist("input2.txt", circuit, outputNode);
 
     unordered_map<string, TreeNode*> memo;
     TreeNode* root = buildNandNotTree(outputNode, circuit, memo);
