@@ -239,6 +239,10 @@ private:
             default:
                 return -1;
         }
+        cout << "[DEBUG] Node: " << nm << ", Type: " << static_cast<int>(n.type)
+            << ", Inputs: ";
+        for (auto& ch : n.inputs) cout << ch << " ";
+        cout << ", Cost: " << best << endl;
         return n.cost = best;
     }
 };
