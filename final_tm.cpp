@@ -9,7 +9,10 @@
 
 using namespace std;
 
-// Node types in the circuit
+unordered_map<string, Node> nodes;
+string outputNode;
+
+// Gates used in the circuit
 enum class NodeType {
     AND,
     OR,
@@ -22,7 +25,7 @@ enum class NodeType {
     AOI22
 };
 
-// Node structure
+
 struct Node {
     string name;
     NodeType type;
@@ -37,7 +40,7 @@ struct Node {
       {}
 };
 
-// Gate costs
+// Constants of gate costs given in technology table
 static const int NOT_COST   = 2;
 static const int NAND2_COST = 3;
 static const int AND2_COST  = 4;
@@ -46,71 +49,71 @@ static const int OR2_COST   = 4;
 static const int AOI21_COST = 7;
 static const int AOI22_COST = 7;
 
-class TechnologyMapper {
-    unordered_map<string, Node> nodes;
-    string outputNode;
+// Processes input file 
+bool readNetlist(const string &fname) {
+    ifstream f(fname);
+    string line;
 
-public:
-    //takes an input file, skipping comment or blank lines, and populates an unordered map with the 
-    //different gates as Node objects
-    bool readNetlist(const string &fname) {
-        ifstream f(fname);
-        if (!f.is_open()) return false;
-        string line;
-        while (getline(f, line)) {
-            if (line.empty() || line.rfind("Test", 0) == 0 || line.rfind("Script", 0) == 0)
-                continue;
-            istringstream iss(line);
-            string nm, op;
-            iss >> nm >> op;
-            if (op == "INPUT") {
-                Node &n = nodes[nm];
-                n.name = nm;
-                n.type = NodeType::INPUT;
-                n.cost = 0;
-            } else if (op == "OUTPUT") {
-                outputNode = nm;
-            } else if (op == "=") {
-                string gt;
-                iss >> gt;
-                Node &n = nodes[nm];
-                n.name = nm;
-                if (gt == "NOT") {
-                    n.type = NodeType::NOT;
-                    string a; iss >> a;
-                    n.inputs = {a};
-                } else if (gt == "AND") {
-                    n.type = NodeType::AND;
-                    string a, b; iss >> a >> b;
-                    n.inputs = {a, b};
-                } else if (gt == "OR") {
-                    n.type = NodeType::OR;
-                    string a, b; iss >> a >> b;
-                    n.inputs = {a, b};
-                } else if (gt == "NAND2") {
-                    n.type = NodeType::NAND2;
-                    string a, b; iss >> a >> b;
-                    n.inputs = {a, b};
-                } else if (gt == "NOR2") {
-                    n.type = NodeType::NOR2;
-                    string a, b; iss >> a >> b;
-                    n.inputs = {a, b};
-                } else if (gt == "AOI21") {
-                    n.type = NodeType::AOI21;
-                    string a, b, c; iss >> a >> b >> c;
-                    n.inputs = {a, b, c};
-                } else if (gt == "AOI22") {
-                    n.type = NodeType::AOI22;
-                    string a, b, c, d; iss >> a >> b >> c >> d;
-                    n.inputs = {a, b, c, d};
-                } else if (iss.peek() == EOF) {
-                    n.type = NodeType::OUTPUT;
-                    n.inputs = {gt};
-                }
+    //just in case there is an error opening the input file
+    if (!f.is_open()){
+        return false;
+    } 
+
+    
+    while (getline(f, line)) {
+        if (line.empty() || line.rfind("Test", 0) == 0 || line.rfind("Script", 0) == 0)
+            continue;
+        istringstream iss(line);
+        string nm, op;
+        iss >> nm >> op;
+        if (op == "INPUT") {
+            Node &n = nodes[nm];
+            n.name = nm;
+            n.type = NodeType::INPUT;
+            n.cost = 0;
+        } else if (op == "OUTPUT") {
+            outputNode = nm;
+        } else if (op == "=") {
+            string gt;
+            iss >> gt;
+            Node &n = nodes[nm];
+            n.name = nm;
+            if (gt == "NOT") {
+                n.type = NodeType::NOT;
+                string a; iss >> a;
+                n.inputs = {a};
+            } else if (gt == "AND") {
+                n.type = NodeType::AND;
+                string a, b; iss >> a >> b;
+                n.inputs = {a, b};
+            } else if (gt == "OR") {
+                n.type = NodeType::OR;
+                string a, b; iss >> a >> b;
+                n.inputs = {a, b};
+            } else if (gt == "NAND2") {
+                n.type = NodeType::NAND2;
+                string a, b; iss >> a >> b;
+                n.inputs = {a, b};
+            } else if (gt == "NOR2") {
+                n.type = NodeType::NOR2;
+                string a, b; iss >> a >> b;
+                n.inputs = {a, b};
+            } else if (gt == "AOI21") {
+                n.type = NodeType::AOI21;
+                string a, b, c; iss >> a >> b >> c;
+                n.inputs = {a, b, c};
+            } else if (gt == "AOI22") {
+                n.type = NodeType::AOI22;
+                string a, b, c, d; iss >> a >> b >> c >> d;
+                n.inputs = {a, b, c, d};
+            } else if (iss.peek() == EOF) {
+                n.type = NodeType::OUTPUT;
+                n.inputs = {gt};
             }
         }
-        return !outputNode.empty();
     }
+    return !outputNode.empty();
+}
 
     int calculateMinimalCost() {
         for (auto &p : nodes) {
@@ -239,20 +242,15 @@ private:
             default:
                 return -1;
         }
-        cout << "[DEBUG] Node: " << nm << ", Type: " << static_cast<int>(n.type)
-            << ", Inputs: ";
-        for (auto& ch : n.inputs) cout << ch << " ";
-        cout << ", Cost: " << best << endl;
         return n.cost = best;
     }
 };
 
 int main() {
-    TechnologyMapper tm;
-    if (!tm.readNetlist("input.txt")){
+    if (!readNetlist("input.txt")){
         return 1;
     } 
-    int c = tm.calculateMinimalCost();
+    int c = calculateMinimalCost();
     if (c < 0){
         return 1;
     } 
