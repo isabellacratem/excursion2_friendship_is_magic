@@ -22,14 +22,19 @@ enum class NodeType {
     AOI22
 };
 
-// Structure to represent a node
+// Node structure
 struct Node {
     string name;
     NodeType type;
     vector<string> inputs;
     int cost;
     bool visited;
-    Node() : type(NodeType::INPUT), cost(-1), visited(false) {}
+
+    Node() :
+      type(NodeType::INPUT),
+      cost(-1),
+      visited(false) 
+      {}
 };
 
 // Gate costs
@@ -42,9 +47,9 @@ static const int AOI21_COST = 7;
 static const int AOI22_COST = 7;
 
 // Utility to trim whitespace
-static string trim(const string &s) {
+static std::string trim(const std::string &s) {
     size_t f = s.find_first_not_of(" \t\r\n");
-    if (f == string::npos) return "";
+    if (f == std::string::npos) return "";
     size_t l = s.find_last_not_of(" \t\r\n");
     return s.substr(f, l - f + 1);
 }
@@ -54,11 +59,11 @@ class TechnologyMapper {
     string outputNode;
 
 public:
-    bool readNetlist(const string &fname) {
-        ifstream f(fname);
+    bool readNetlist(const std::string &fname) {
+        std::ifstream f(fname);
         if (!f.is_open()) return false;
-        string line;
-        while (getline(f, line)) {
+        std::string line;
+        while (std::getline(f, line)) {
             line = trim(line);
             if (line.empty() || line.rfind("Test", 0) == 0 || line.rfind("Script", 0) == 0)
                 continue;
@@ -83,27 +88,27 @@ public:
                     n.inputs = {a};
                 } else if (gt == "AND") {
                     n.type = NodeType::AND;
-                    string a,b; iss >> a >> b;
+                    std::string a,b; iss >> a >> b;
                     n.inputs = {a,b};
                 } else if (gt == "OR") {
                     n.type = NodeType::OR;
-                    string a,b; iss >> a >> b;
+                    std::string a,b; iss >> a >> b;
                     n.inputs = {a,b};
                 } else if (gt == "NAND2") {
                     n.type = NodeType::NAND2;
-                    string a,b; iss >> a >> b;
+                    std::string a,b; iss >> a >> b;
                     n.inputs = {a,b};
                 } else if (gt == "NOR2") {
                     n.type = NodeType::NOR2;
-                    string a,b; iss >> a >> b;
+                    std::string a,b; iss >> a >> b;
                     n.inputs = {a,b};
                 } else if (gt == "AOI21") {
                     n.type = NodeType::AOI21;
-                    string a,b,c; iss >> a >> b >> c;
+                    std::string a,b,c; iss >> a >> b >> c;
                     n.inputs = {a,b,c};
                 } else if (gt == "AOI22") {
                     n.type = NodeType::AOI22;
-                    string a,b,c,d; iss >> a >> b >> c >> d;
+                    std::string a,b,c,d; iss >> a >> b >> c >> d;
                     n.inputs = {a,b,c,d};
                 } else if (iss.peek() == EOF) {
                     n.type = NodeType::OUTPUT;
@@ -123,66 +128,88 @@ public:
     }    
     
 private:
-    int eval(const string &nm) {
+    int eval(const std::string &nm) {
         Node &n = nodes[nm];
-
-        if (n.visited && n.cost >= 0) return n.cost;
+        // --- NOT-node patterns ---
+        if (n.type == NodeType::NOT) {
+            const std::string &c = n.inputs[0];
+            // double-negation: NOT(NOT(x)) -> x
+            if (nodes[c].type == NodeType::NOT)
+                return eval(nodes[c].inputs[0]);
+            // NOT(OR(a,b)) -> NOR2(a,b)
+            if (nodes[c].type == NodeType::OR) {
+                auto &in = nodes[c].inputs;
+                int c0 = eval(in[0]);
+                int c1 = eval(in[1]);
+                return (c0<0||c1<0) ? -1 : c0 + c1 + NOR2_COST;
+            }
+            // NOT(OR(AND,...)) -> AOI21/AOI22
+            if (nodes[c].type == NodeType::OR) {
+                auto &in = nodes[c].inputs;
+                bool a0 = nodes[in[0]].type==NodeType::AND;
+                bool a1 = nodes[in[1]].type==NodeType::AND;
+                // AOI21
+                if (a0 && !a1) {
+                    auto &v = nodes[in[0]].inputs;
+                    int x=eval(v[0]), y=eval(v[1]), z=eval(in[1]);
+                    return (x<0||y<0||z<0)?-1 : x+y+z+AOI21_COST;
+                }
+                if (!a0 && a1) {
+                    auto &v = nodes[in[1]].inputs;
+                    int x=eval(v[0]), y=eval(v[1]), z=eval(in[0]);
+                    return (x<0||y<0||z<0)?-1 : x+y+z+AOI21_COST;
+                }
+                // AOI22
+                if (a0 && a1) {
+                    auto &v0=nodes[in[0]].inputs, &v1=nodes[in[1]].inputs;
+                    int x=eval(v0[0]), y=eval(v0[1]), u=eval(v1[0]), v2=eval(v1[1]);
+                    return (x<0||y<0||u<0||v2<0)?-1 : x+y+u+v2+AOI22_COST;
+                }
+            }
+        }
+        // --- AND-node patterns ---
+        if (n.type == NodeType::AND) {
+            auto &in = n.inputs;
+            // Pattern: AND(AND(a,b), NOT(OR(c,d))) -> NOR2(NAND2(a,b), OR(c,d))
+            if (nodes[in[0]].type == NodeType::AND &&
+                nodes[in[1]].type == NodeType::NOT &&
+                nodes[nodes[in[1]].inputs[0]].type == NodeType::OR) {
+                auto &ab = nodes[in[0]].inputs;
+                auto &cd = nodes[nodes[in[1]].inputs[0]].inputs;
+                int ca = eval(ab[0]); if (ca<0) return -1;
+                int cb = eval(ab[1]); if (cb<0) return -1;
+                int cc = eval(cd[0]); if (cc<0) return -1;
+                int cdv= eval(cd[1]); if (cdv<0) return -1;
+                int costNand = ca + cb + NAND2_COST;
+                int costOr   = cc + cdv + OR2_COST;
+                return costNand + costOr + NOR2_COST;
+            }
+            // Pattern: AND(NOT(OR(c,d)), AND(a,b)) -> NOR2(OR(c,d), NAND2(a,b))
+            if (nodes[in[1]].type == NodeType::AND &&
+                nodes[in[0]].type == NodeType::NOT &&
+                nodes[nodes[in[0]].inputs[0]].type == NodeType::OR) {
+                auto &ab = nodes[in[1]].inputs;
+                auto &cd = nodes[nodes[in[0]].inputs[0]].inputs;
+                int ca = eval(ab[0]); if (ca<0) return -1;
+                int cb = eval(ab[1]); if (cb<0) return -1;
+                int cc = eval(cd[0]); if (cc<0) return -1;
+                int cdv= eval(cd[1]); if (cdv<0) return -1;
+                int costNand = ca + cb + NAND2_COST;
+                int costOr   = cc + cdv + OR2_COST;
+                return costNand + costOr + NOR2_COST;
+            }
+        }
+        // memo
+        if (n.visited && n.cost>=0) return n.cost;
         n.visited = true;
-
-        // Base cases
-        if (n.type == NodeType::INPUT)  return n.cost = 0;
-        if (n.type == NodeType::OUTPUT) return n.cost = eval(n.inputs[0]);
-
-        // Optimization: NOT(AND x y) → NAND2
-        if (n.type == NodeType::NOT && n.inputs.size() == 1) {
-            const string &child_name = n.inputs[0];
-            Node &child = nodes[child_name];
-
-            if (child.type == NodeType::AND && child.inputs.size() == 2) {
-                int c1 = eval(child.inputs[0]);
-                int c2 = eval(child.inputs[1]);
-                if (c1 >= 0 && c2 >= 0)
-                    return n.cost = c1 + c2 + NAND2_COST;
-            }
-
-            // Optimization: NOT(OR x y) → NOR2
-            if (child.type == NodeType::OR && child.inputs.size() == 2) {
-                int c1 = eval(child.inputs[0]);
-                int c2 = eval(child.inputs[1]);
-                if (c1 >= 0 && c2 >= 0)
-                    return n.cost = c1 + c2 + NOR2_COST;
-            }
-
-            // Fallback
-            int c = eval(child_name);
-            if (c >= 0)
-                return n.cost = min(NOT_COST + c, NAND2_COST + c);
-            return -1;
-        }
-
-        // Optimization: AND(NOT x, NOT y) → AND2 + 2 NOT
-        if (n.type == NodeType::AND && n.inputs.size() == 2) {
-            Node &a = nodes[n.inputs[0]];
-            Node &b = nodes[n.inputs[1]];
-            if (a.type == NodeType::NOT && b.type == NodeType::NOT) {
-                int c1 = eval(a.inputs[0]);
-                int c2 = eval(b.inputs[0]);
-                if (c1 >= 0 && c2 >= 0)
-                    return n.cost = c1 + c2 + 2 * NOT_COST + AND2_COST;
-            }
-        }
-
-        // Evaluate child costs
-        int sum = 0;
-        for (const string &in : n.inputs) {
-            int c = eval(in);
-            if (c < 0) return -1;
-            sum += c;
-        }
-
-        // Generic cost fallback
-        int best = numeric_limits<int>::max();
-        switch (n.type) {
+        // base
+        if (n.type==NodeType::INPUT)  return n.cost=0;
+        if (n.type==NodeType::OUTPUT) return n.cost=eval(n.inputs[0]);
+        // generic sum
+        int sum=0;
+        for(auto &ch:n.inputs){int c=eval(ch); if(c<0) return -1; sum+=c;}
+        int best=std::numeric_limits<int>::max();
+        switch(n.type){
             case NodeType::NOT:
                 best = min(NOT_COST + sum, NAND2_COST + sum);
                 break;
@@ -190,13 +217,13 @@ private:
                 best = min(AND2_COST + sum, NAND2_COST + NOT_COST + sum);
                 break;
             case NodeType::OR:
-                best = min({OR2_COST + sum, NOR2_COST + NOT_COST + sum, 2 * NOT_COST + NAND2_COST + sum});
+                best = std::min({OR2_COST+sum, NOR2_COST+NOT_COST+sum, 2*NOT_COST+NAND2_COST+sum});
                 break;
             case NodeType::NAND2:
                 best = NAND2_COST + sum;
                 break;
             case NodeType::NOR2:
-                best = min(NOR2_COST + sum, 3 * NOT_COST + NAND2_COST + sum);
+                best = std::min(NOR2_COST+sum, 3*NOT_COST+NAND2_COST+sum);
                 break;
             case NodeType::AOI21:
                 best = AOI21_COST + sum;
@@ -217,10 +244,10 @@ private:
 
 int main() {
     TechnologyMapper tm;
-    if (!tm.readNetlist("input8.txt")) return 1;
+    if(!tm.readNetlist("input.txt")) return 1;
     int c = tm.calculateMinimalCost();
-    if (c < 0) return 1;
-    ofstream out("output.txt"); out << c;
-    cout << "Minimal cost: " << c << endl;
+    if(c<0) return 1;
+    std::ofstream out("output.txt"); out<<c;
+    std::cout<<"Minimal cost: "<<c<<std::endl;
     return 0;
 }
