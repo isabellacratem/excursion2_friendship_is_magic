@@ -1,29 +1,27 @@
-# 📘 MINCOST
+# MINCOST
 
 > This algorithm takes an input of various logic gates and converts it into a minimum cost configuration using only NOT and NAND gates. 
 
 ---
 
-## 📂 Table of Contents
+## Table of Contents
 
 - [Overview](#overview)
 - [Features](#features)
 - [Installation](#installation)
-- [Usage](#usage)
-- [Configuration](#configuration)
-- [Contributing](#contributing)
-- [License](#license)
+- [Requirements](#requirements)
+- [Setup](#setup)
 - [Credits](#credits)
 
 ---
 
-## 📝 Overview
+## Overview
 
 Briefly explain what the project is about, its purpose, and why it exists. Mention key technologies or concepts.
 
 ---
 
-## ✨ Features
+## Features
 
 - Feature 1
 - Feature 2
@@ -33,24 +31,17 @@ Briefly explain what the project is about, its purpose, and why it exists. Menti
 
 ---
 
-## ⚙️ Installation
+## Installation
 
 ### Requirements
-
-- Dependency 1
+- C++
+- 
 - Dependency 2
 - Operating system or platform notes (if any)
 
 ### Setup
 
-```bash
-# Clone the repository
-git clone https://github.com/your-username/project-name.git
-
-# Navigate into the directory
-cd project-name
-
-# Install dependencies
-pip install -r requirements.txt
-# or for JavaScript projects
-npm install
+### Credits
+Allison Freeman
+Emily Wang
+Isabella Cratem
