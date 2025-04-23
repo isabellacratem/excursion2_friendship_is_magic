@@ -21,7 +21,7 @@ This is a C++ tool built to figure out the cheapest way to implement a logic cir
 Technology_Mapping -
 input.txt      
 output.txt     
-final_tm.cpp     
+final_tm_real.cpp     
 README.md      
 
 ## Breakdown of Code
